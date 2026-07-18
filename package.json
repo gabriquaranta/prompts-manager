@@ -150,35 +150,35 @@
           "group": "navigation"
         }
       ],
-      "view/item": [
+      "view/item/context": [
         {
           "command": "promptHistory.openDiff",
-          "when": "view == promptHistory.commits && viewItem == promptHistoryFile",
+          "when": "viewItem == promptHistoryFile",
           "group": "inline"
         },
         {
           "command": "promptHistory.copyPrompt",
-          "when": "view == promptHistory.commits && viewItem == promptHistoryFile",
+          "when": "viewItem == promptHistoryFile",
           "group": "navigation"
         },
         {
           "command": "promptHistory.openRevision",
-          "when": "view == promptHistory.commits && viewItem == promptHistoryFile",
+          "when": "viewItem == promptHistoryFile",
           "group": "navigation"
         },
         {
           "command": "promptHistory.compareRevisions",
-          "when": "view == promptHistory.commits && viewItem == promptHistoryFile",
+          "when": "viewItem == promptHistoryFile",
           "group": "navigation"
         },
         {
           "command": "promptHistory.toggleBookmark",
-          "when": "view == promptHistory.commits && (viewItem == promptHistoryCommit || viewItem == promptHistoryFile)",
+          "when": "viewItem == promptHistoryCommit || viewItem == promptHistoryFile",
           "group": "navigation"
         },
         {
           "command": "promptHistory.loadMore",
-          "when": "view == promptHistory.commits && viewItem == promptHistoryLoadMore",
+          "when": "viewItem == promptHistoryLoadMore",
           "group": "navigation"
         }
       ],
