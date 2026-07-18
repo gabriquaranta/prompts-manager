@@ -1,0 +1,212 @@
+{
+  "name": "prompt-history",
+  "displayName": "Prompt History",
+  "description": "Show committed prompt-file history in the Source Control view.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:promptHistory.commits",
+    "onCommand:promptHistory.refresh",
+    "onCommand:promptHistory.search",
+    "onCommand:promptHistory.clearSearch",
+    "onCommand:promptHistory.showFileHistory",
+    "onCommand:promptHistory.openDiff",
+    "onCommand:promptHistory.copyPrompt",
+    "onCommand:promptHistory.openRevision",
+    "onCommand:promptHistory.compareRevisions",
+    "onCommand:promptHistory.loadMore",
+    "onCommand:promptHistory.toggleBookmark",
+    "onCommand:promptHistory.openSettings"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "test": "vitest run",
+    "vscode:prepublish": "npm run compile"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "promptHistory.refresh",
+        "title": "Refresh",
+        "category": "Prompt History",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "promptHistory.search",
+        "title": "Search",
+        "category": "Prompt History",
+        "icon": "$(search)"
+      },
+      {
+        "command": "promptHistory.clearSearch",
+        "title": "Clear Search",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.showFileHistory",
+        "title": "Show Prompt History for Active File",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.openDiff",
+        "title": "Open Diff",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.copyPrompt",
+        "title": "Copy Prompt at Revision",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.openRevision",
+        "title": "Open Prompt Revision",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.compareRevisions",
+        "title": "Compare Prompt Revisions",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.loadMore",
+        "title": "Load More History",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.toggleBookmark",
+        "title": "Pin/Unpin Prompt History Item",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.openSettings",
+        "title": "Open Settings",
+        "category": "Prompt History",
+        "icon": "$(settings-gear)"
+      }
+    ],
+    "configuration": {
+      "title": "Prompt History",
+      "properties": {
+        "promptHistory.includeGlobs": {
+          "type": "array",
+          "default": [
+            "prompts/**",
+            "**/*.prompt.md",
+            "**/*.prompt.txt"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns for files treated as prompt files."
+        },
+        "promptHistory.excludeGlobs": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/.git/**"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns excluded from prompt history."
+        },
+        "promptHistory.maxCommits": {
+          "type": "number",
+          "default": 200,
+          "minimum": 1,
+          "maximum": 5000,
+          "description": "Number of commits to load per history page."
+        }
+      }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "promptHistory.refresh",
+          "when": "view == promptHistory.commits",
+          "group": "navigation"
+        },
+        {
+          "command": "promptHistory.search",
+          "when": "view == promptHistory.commits",
+          "group": "navigation"
+        },
+        {
+          "command": "promptHistory.clearSearch",
+          "when": "view == promptHistory.commits",
+          "group": "navigation"
+        },
+        {
+          "command": "promptHistory.openSettings",
+          "when": "view == promptHistory.commits",
+          "group": "navigation"
+        }
+      ],
+      "view/item": [
+        {
+          "command": "promptHistory.openDiff",
+          "when": "view == promptHistory.commits && viewItem == promptHistoryFile",
+          "group": "inline"
+        },
+        {
+          "command": "promptHistory.copyPrompt",
+          "when": "view == promptHistory.commits && viewItem == promptHistoryFile",
+          "group": "navigation"
+        },
+        {
+          "command": "promptHistory.openRevision",
+          "when": "view == promptHistory.commits && viewItem == promptHistoryFile",
+          "group": "navigation"
+        },
+        {
+          "command": "promptHistory.compareRevisions",
+          "when": "view == promptHistory.commits && viewItem == promptHistoryFile",
+          "group": "navigation"
+        },
+        {
+          "command": "promptHistory.toggleBookmark",
+          "when": "view == promptHistory.commits && (viewItem == promptHistoryCommit || viewItem == promptHistoryFile)",
+          "group": "navigation"
+        },
+        {
+          "command": "promptHistory.loadMore",
+          "when": "view == promptHistory.commits && viewItem == promptHistoryLoadMore",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "promptHistory.showFileHistory",
+          "when": "resourceScheme == file",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "views": {
+      "scm": [
+        {
+          "id": "promptHistory.commits",
+          "name": "Prompt History",
+          "icon": "resources/prompt-history.svg"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "minimatch": "^10.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.2",
+    "vitest": "^1.6.0"
+  }
+}
