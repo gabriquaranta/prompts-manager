@@ -19,7 +19,8 @@ import {
   FileNode,
   LoadMoreNode,
   PromptHistoryTreeProvider,
-  RepoNode
+  RepoNode,
+  TestScriptNode
 } from "./tree";
 import { PromptTestRequest, PromptTestResult } from "./types";
 
@@ -118,7 +119,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
     treeProvider.setTestResult(request, scriptPath, result);
     writeTestOutput(output, request, scriptPath, result);
-    showTestResult(output, request, result);
     return result;
   };
 
@@ -228,7 +228,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await executeTest(request);
       });
     }),
-    vscode.commands.registerCommand("promptHistory.selectTestScript", async (node?: RepoNode | FileNode) => {
+    vscode.commands.registerCommand("promptHistory.selectTestScript", async (node?: RepoNode | FileNode | TestScriptNode) => {
       await runAndReport(async () => {
         const repoRoot = await selectRepository(node, treeProvider);
 
@@ -240,11 +240,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
         if (selected) {
           treeProvider.setTestScript(repoRoot, selected);
-          vscode.window.showInformationMessage(`Test script set to ${selected}`);
         }
       });
     }),
-    vscode.commands.registerCommand("promptHistory.clearTestScript", async (node?: RepoNode | FileNode) => {
+    vscode.commands.registerCommand("promptHistory.clearTestScript", async (node?: RepoNode | FileNode | TestScriptNode) => {
       await runAndReport(async () => {
         const repoRoot = await selectRepository(node, treeProvider);
 
@@ -254,8 +253,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
         await testScriptStore.clear(repoRoot);
         treeProvider.setTestScript(repoRoot, undefined);
-        vscode.window.showInformationMessage(`Cleared test script for ${path.basename(repoRoot)}`);
       });
+    }),
+    vscode.commands.registerCommand("promptHistory.showTestOutput", () => {
+      output.show(true);
     }),
     vscode.commands.registerCommand("promptHistory.loadMore", async (node: LoadMoreNode) => {
       await runAndReport(() => treeProvider.loadMore(node.repoRoot));
@@ -334,10 +335,10 @@ async function currentPromptRequest(): Promise<PromptTestRequest> {
  * Using the history provider first keeps configuration aligned with the repositories visible to the user.
  */
 async function selectRepository(
-  node: RepoNode | FileNode | undefined,
+  node: RepoNode | FileNode | TestScriptNode | undefined,
   treeProvider: PromptHistoryTreeProvider
 ): Promise<string | undefined> {
-  if (node instanceof RepoNode || node instanceof FileNode) {
+  if (node instanceof RepoNode || node instanceof FileNode || node instanceof TestScriptNode) {
     return node.repoRoot;
   }
 
@@ -406,39 +407,6 @@ function writeTestOutput(
   }
 
   output.appendLine("");
-}
-
-/** Show a concise completion message and reveal diagnostics when attention is needed.
- *
- * Successful runs do not steal focus, while failed, cancelled, and errored runs expose their actionable output.
- */
-function showTestResult(
-  output: vscode.OutputChannel,
-  request: PromptTestRequest,
-  result: PromptTestResult
-): void {
-  const message = `${testStatusLabel(result.status)}: ${request.sourcePath} (${result.durationMs} ms)`;
-
-  if (result.status === "passed") {
-    vscode.window.showInformationMessage(message);
-    return;
-  }
-
-  output.show(true);
-
-  if (result.status === "failed") {
-    vscode.window.showWarningMessage(message);
-  } else {
-    vscode.window.showErrorMessage(message);
-  }
-}
-
-/** Format a public test status for user-facing messages.
- *
- * A single formatter keeps notifications and future status surfaces consistent.
- */
-function testStatusLabel(status: PromptTestResult["status"]): string {
-  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 /** Execute an asynchronous command and report its failure consistently.

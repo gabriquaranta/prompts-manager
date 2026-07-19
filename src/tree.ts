@@ -13,7 +13,56 @@ import {
   PromptTestStatus
 } from "./types";
 
-export type PromptHistoryNode = CommitNode | FileNode | MessageNode | RepoNode | LoadMoreNode;
+export type PromptHistoryNode =
+  | CommitNode
+  | FileNode
+  | MessageNode
+  | RepoNode
+  | LoadMoreNode
+  | TestScriptNode
+  | TestResultNode;
+
+interface LatestTestResult {
+  request: PromptTestRequest;
+  result: PromptTestResult;
+  scriptPath: string;
+}
+
+export class TestScriptNode extends vscode.TreeItem {
+  constructor(readonly repoRoot: string, scriptPath: string | undefined) {
+    super("Test script", vscode.TreeItemCollapsibleState.None);
+
+    this.description = scriptPath ?? "Select a Python script";
+    this.tooltip = scriptPath
+      ? `Test script: ${scriptPath}\nSelect to change it`
+      : "Select the repository Python test script";
+    this.contextValue = "promptHistoryTestScript";
+    this.iconPath = new vscode.ThemeIcon("tools");
+    this.command = {
+      command: "promptHistory.selectTestScript",
+      title: "Select Test Script",
+      arguments: [this]
+    };
+  }
+}
+
+export class TestResultNode extends vscode.TreeItem {
+  constructor(readonly repoRoot: string, latest: LatestTestResult | undefined) {
+    super("Latest test", vscode.TreeItemCollapsibleState.None);
+
+    this.description = latest
+      ? `${testStatusLabel(latest.result.status)} • ${latest.request.sourcePath} • ${latest.result.durationMs} ms`
+      : "Not run yet";
+    this.tooltip = latest
+      ? `${testStatusLabel(latest.result.status)}\n${latest.request.sourcePath}\n${latest.scriptPath}\n${latest.result.durationMs} ms`
+      : "Run a prompt test to see its latest result here";
+    this.contextValue = "promptHistoryTestResult";
+    this.iconPath = new vscode.ThemeIcon(latest ? testStatusIcon(latest.result.status) : "circle-outline");
+    this.command = latest
+      ? { command: "promptHistory.showTestOutput", title: "Show Test Output" }
+      : undefined;
+  }
+}
 
 export class CommitNode extends vscode.TreeItem {
   constructor(
@@ -116,6 +165,7 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
   private readonly bookmarks: Set<string>;
   private readonly bookmarkState: vscode.Memento;
   private readonly testResults = new Map<string, PromptTestResult>();
+  private readonly latestTestResults = new Map<string, LatestTestResult>();
 
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
@@ -267,6 +317,7 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
       }
     }
 
+    this.latestTestResults.delete(repoRoot);
     this.changeEmitter.fire(undefined);
   }
 
@@ -276,6 +327,7 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
    */
   setTestResult(request: PromptTestRequest, scriptPath: string, result: PromptTestResult): void {
     this.testResults.set(testResultKey(request.repoRoot, request.revision, request.sourcePath, scriptPath), result);
+    this.latestTestResults.set(request.repoRoot, { request, scriptPath, result });
     this.changeEmitter.fire(undefined);
   }
 
@@ -356,15 +408,23 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
 
   private childrenForRepository(repository: RepoNode): PromptHistoryNode[] {
     const commits = this.visibleCommits(repository);
-    const children: PromptHistoryNode[] = commits.map((commit) => {
-      return new CommitNode(repository.repoRoot, commit, this.bookmarks.has(commitBookmarkKey(repository.repoRoot, commit)));
-    });
+    const children: PromptHistoryNode[] = [
+      new TestScriptNode(repository.repoRoot, this.testScriptForRepository(repository.repoRoot)),
+      new TestResultNode(repository.repoRoot, this.latestTestResults.get(repository.repoRoot)),
+      ...commits.map((commit) => {
+        return new CommitNode(
+          repository.repoRoot,
+          commit,
+          this.bookmarks.has(commitBookmarkKey(repository.repoRoot, commit))
+        );
+      })
+    ];
 
     if (repository.hasMore) {
       children.push(new LoadMoreNode(repository.repoRoot));
     }
 
-    if (children.length === 0) {
+    if (commits.length === 0 && !repository.hasMore) {
       return [new MessageNode("No prompt history matches the current filter")];
     }
 

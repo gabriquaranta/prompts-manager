@@ -109,6 +109,7 @@ The extension supports VS Code multi-root workspaces and parent folders containi
 - Uses process exit code `0` for pass and any non-zero exit code for failure.
 - Captures stdout and stderr in the `Prompt History Tests` output channel.
 - Supports cancellation, a bounded timeout, and session-only result decoration.
+- Shows the selected test script and latest result as the first rows inside the History panel.
 - Requires a trusted workspace and never runs tests automatically.
 
 ### Bookmarks and refresh
@@ -167,7 +168,7 @@ Right-click a prompt file inside the Prompt History view to access:
 
 ### Configure a test script
 
-Use `Select Test Script` from the History toolbar or a repository context menu. Select one `.py` file inside the owning repository. The selection is stored locally in VS Code workspace state and is independent for each repository.
+Select the `Test script` row at the top of History, then choose one `.py` file inside the owning repository. The selection is stored locally in VS Code workspace state and is independent for each repository. In a multi-repository workspace, the row appears at the top of each repository group.
 
 The repository must contain its Python virtual environment at the exact platform path:
 
@@ -192,7 +193,7 @@ PROMPT_HISTORY_SOURCE_PATH
 PROMPT_HISTORY_REVISION
 ```
 
-`PROMPT_HISTORY_REVISION` is empty when testing the current editor content. Test failures and execution errors automatically reveal the `Prompt History Tests` output channel.
+`PROMPT_HISTORY_REVISION` is empty when testing the current editor content. The `Latest test` row shows the status, prompt path, and duration. Select that row to open complete stdout and stderr in the `Prompt History Tests` output channel.
 
 Example validator:
 

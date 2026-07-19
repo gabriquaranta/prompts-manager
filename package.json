@@ -26,6 +26,7 @@
     "onCommand:promptHistory.testCurrentPrompt",
     "onCommand:promptHistory.selectTestScript",
     "onCommand:promptHistory.clearTestScript",
+    "onCommand:promptHistory.showTestOutput",
     "onCommand:promptHistory.loadMore",
     "onCommand:promptHistory.toggleBookmark",
     "onCommand:promptHistory.openSettings"
@@ -115,6 +116,11 @@
         "category": "Prompt History"
       },
       {
+        "command": "promptHistory.showTestOutput",
+        "title": "Show Test Output",
+        "category": "Prompt History"
+      },
+      {
         "command": "promptHistory.loadMore",
         "title": "Load More History",
         "category": "Prompt History"
@@ -194,11 +200,6 @@
           "command": "promptHistory.openSettings",
           "when": "view == promptHistory.commits",
           "group": "navigation"
-        },
-        {
-          "command": "promptHistory.selectTestScript",
-          "when": "view == promptHistory.commits",
-          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -246,6 +247,16 @@
           "command": "promptHistory.clearTestScript",
           "when": "viewItem == promptHistoryRepository",
           "group": "promptManagement@2"
+        },
+        {
+          "command": "promptHistory.clearTestScript",
+          "when": "viewItem == promptHistoryTestScript",
+          "group": "promptManagement@1"
+        },
+        {
+          "command": "promptHistory.showTestOutput",
+          "when": "viewItem == promptHistoryTestResult",
+          "group": "promptManagement@1"
         },
         {
           "command": "promptHistory.toggleBookmark",
