@@ -7,6 +7,7 @@ export function readSettings(): PromptHistorySettings {
   return {
     includeGlobs: config.get<string[]>("includeGlobs", []),
     excludeGlobs: config.get<string[]>("excludeGlobs", []),
-    maxCommits: config.get<number>("maxCommits", 200)
+    maxCommits: config.get<number>("maxCommits", 200),
+    testTimeoutSeconds: config.get<number>("testTimeoutSeconds", 60)
   };
 }

@@ -5,7 +5,8 @@ import { PromptHistorySettings } from "../src/types";
 const settings: PromptHistorySettings = {
   includeGlobs: ["prompts/**", "**/*.prompt.md", "**/*.prompt.txt"],
   excludeGlobs: ["**/node_modules/**", "**/.git/**"],
-  maxCommits: 200
+  maxCommits: 200,
+  testTimeoutSeconds: 60
 };
 
 describe("isPromptPath", () => {

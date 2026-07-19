@@ -1,6 +1,6 @@
 # PROMPT-HISTORY VS Code Extension
 
-Lightweight VS Code extension for prompt history features by Gabriele Quaranta.
+Lightweight VS Code extension for browsing, restoring, and testing prompt revisions by Gabriele Quaranta.
 
 ## Prerequisites
 - Node.js >= 20 recommended (provides Web globals used by dependencies).
@@ -95,6 +95,21 @@ The extension supports VS Code multi-root workspaces and parent folders containi
 - Handles renamed files using the correct old and new paths.
 - Compares two historical prompt revisions.
 - Compares a historical revision with the current working file.
+- Loads a historical revision into its exact working-tree path through an undoable, unsaved editor change.
+- Previews and confirms the revision before changing a file.
+- Refuses to overwrite a document with unsaved changes.
+
+### Prompt testing
+
+- Selects one repository-owned Python test script per discovered repository.
+- Tests historical content without changing the working tree.
+- Tests the current editor content, including unsaved changes.
+- Loads and tests a revision in one explicit action.
+- Runs the script with the repository's `.venv` Python interpreter.
+- Uses process exit code `0` for pass and any non-zero exit code for failure.
+- Captures stdout and stderr in the `Prompt History Tests` output channel.
+- Supports cancellation, a bounded timeout, and session-only result decoration.
+- Requires a trusted workspace and never runs tests automatically.
 
 ### Bookmarks and refresh
 
@@ -112,16 +127,17 @@ The extension supports VS Code multi-root workspaces and parent folders containi
 - `promptHistory.includeGlobs`: file patterns treated as prompts.
 - `promptHistory.excludeGlobs`: file patterns excluded from history.
 - `promptHistory.maxCommits`: number of commits loaded per history page.
+- `promptHistory.testTimeoutSeconds`: maximum prompt-test duration in seconds.
 
-The extension is read-only with respect to repositories: it never creates, edits, renames, deletes, stages, or commits files.
+The extension changes a prompt file only after an explicit `Load Revision` confirmation. It never stages, commits, resets, cleans, or automatically saves repository files.
 
 ## Where to find and how to use the functionalities
 
-### Open the Prompt History view
+### Open Prompt Management
 
 1. Open a folder or workspace containing one or more Git repositories in VS Code.
-2. Open the Source Control view from the Activity Bar.
-3. Expand the `Prompt History` section.
+2. Open `Prompt Management` from the Activity Bar.
+3. Open the `History` view.
 4. Expand a repository, commit, and prompt file to browse its history.
 5. Select a prompt file to open its standard VS Code diff.
 
@@ -144,7 +160,72 @@ Right-click a prompt file inside the Prompt History view to access:
 - `Copy Prompt at Revision`: copies the historical prompt content to the clipboard.
 - `Open Prompt Revision`: opens the historical content as a read-only editor.
 - `Compare Prompt Revisions`: choose another historical revision or the current working file for comparison.
+- `Load Revision`: preview and load the historical content into its working-tree file.
+- `Test Revision`: test historical content without editing the working tree.
+- `Load Revision and Test`: load the revision, then test the exact editor content.
 - `Pin/Unpin Prompt History Item`: stores or removes a workspace bookmark.
+
+### Configure a test script
+
+Use `Select Test Script` from the History toolbar or a repository context menu. Select one `.py` file inside the owning repository. The selection is stored locally in VS Code workspace state and is independent for each repository.
+
+The repository must contain its Python virtual environment at the exact platform path:
+
+```text
+<repo>/.venv/bin/python              # macOS and Linux
+<repo>/.venv/Scripts/python.exe      # Windows
+```
+
+The extension invokes the script as:
+
+```text
+<repository python> <selected script> <temporary prompt file>
+```
+
+The script reads the UTF-8 candidate prompt from `sys.argv[1]`. Exit with `0` to pass or any non-zero code to fail. Stdout and stderr are diagnostics and do not determine status.
+
+The process runs from the repository root and receives:
+
+```text
+PROMPT_HISTORY_REPO_ROOT
+PROMPT_HISTORY_SOURCE_PATH
+PROMPT_HISTORY_REVISION
+```
+
+`PROMPT_HISTORY_REVISION` is empty when testing the current editor content. Test failures and execution errors automatically reveal the `Prompt History Tests` output channel.
+
+Example validator:
+
+```python
+"""Validate a candidate prompt.
+
+The script returns a process status that works in Prompt History and CI.
+"""
+
+from pathlib import Path
+import sys
+
+
+def main() -> int:
+    """Check the candidate for a required instruction.
+
+    The explicit result gives the caller one stable pass/fail signal.
+    """
+    prompt = Path(sys.argv[1]).read_text(encoding="utf-8")
+
+    if "cite sources" not in prompt.lower():
+        print("Missing required source-citation instruction.")
+        return 1
+
+    print("Prompt validation passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+Use `Test Current Prompt` from the editor title or Command Palette to test the active prompt, including unsaved edits.
 
 ### Active-file history
 
@@ -194,11 +275,12 @@ Example configuration:
     "**/node_modules/**",
     "**/.git/**"
   ],
-  "promptHistory.maxCommits": 200
+  "promptHistory.maxCommits": 200,
+  "promptHistory.testTimeoutSeconds": 60
 }
 ```
 
-`includeGlobs` controls which committed files are treated as prompts. `excludeGlobs` takes precedence over included paths. `maxCommits` controls the number of raw Git commits loaded per page; use `Load more history` to continue browsing beyond the first page.
+`includeGlobs` controls which committed files are treated as prompts. `excludeGlobs` takes precedence over included paths. `maxCommits` controls the number of raw Git commits loaded per page; use `Load more history` to continue browsing beyond the first page. `testTimeoutSeconds` controls when a running Python validator is terminated and reported as an execution error.
 
 ## Publish
 

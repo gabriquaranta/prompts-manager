@@ -7,7 +7,10 @@ import {
   PromptCommit,
   PromptFileChange,
   PromptHistoryFilter,
-  PromptRevision
+  PromptRevision,
+  PromptTestRequest,
+  PromptTestResult,
+  PromptTestStatus
 } from "./types";
 
 export type PromptHistoryNode = CommitNode | FileNode | MessageNode | RepoNode | LoadMoreNode;
@@ -32,14 +35,16 @@ export class FileNode extends vscode.TreeItem {
     readonly repoRoot: string,
     readonly commit: PromptCommit,
     readonly file: PromptFileChange,
-    readonly bookmarked: boolean
+    readonly bookmarked: boolean,
+    readonly testStatus?: PromptTestStatus
   ) {
     super(file.path, vscode.TreeItemCollapsibleState.None);
 
-    this.description = `${statusLabel(file)}${bookmarked ? " • Pinned" : ""}`;
-    this.tooltip = file.oldPath ? `${file.oldPath} -> ${file.path}` : file.path;
+    this.description = `${statusLabel(file)}${bookmarked ? " • Pinned" : ""}${testStatus ? ` • ${testStatusLabel(testStatus)}` : ""}`;
+    const fileTooltip = file.oldPath ? `${file.oldPath} -> ${file.path}` : file.path;
+    this.tooltip = testStatus ? `${fileTooltip}\nLatest test: ${testStatusLabel(testStatus)}` : fileTooltip;
     this.contextValue = "promptHistoryFile";
-    this.iconPath = new vscode.ThemeIcon(bookmarked ? "pinned" : "file-code");
+    this.iconPath = new vscode.ThemeIcon(testStatus ? testStatusIcon(testStatus) : bookmarked ? "pinned" : "file-code");
     this.command = {
       command: "promptHistory.openDiff",
       title: "Open Diff",
@@ -57,16 +62,25 @@ export class RepoNode extends vscode.TreeItem {
     readonly repoRoot: string,
     readonly commits: PromptCommit[],
     hasMore: boolean,
-    nextOffset: number
+    nextOffset: number,
+    testScript?: string
   ) {
     super(path.basename(repoRoot), vscode.TreeItemCollapsibleState.Collapsed);
     this.hasMore = hasMore;
     this.nextOffset = nextOffset;
 
-    this.description = repoRoot;
-    this.tooltip = repoRoot;
+    this.setTestScript(testScript);
     this.contextValue = "promptHistoryRepository";
     this.iconPath = new vscode.ThemeIcon("repo");
+  }
+
+  /** Update the repository's visible test-script metadata.
+   *
+   * Keeping this state on the node makes configuration changes visible without reloading Git history.
+   */
+  setTestScript(testScript: string | undefined): void {
+    this.description = testScript ? `${this.repoRoot} • ${testScript}` : this.repoRoot;
+    this.tooltip = testScript ? `${this.repoRoot}\nTest script: ${testScript}` : this.repoRoot;
   }
 }
 
@@ -101,10 +115,14 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
   private filter: PromptHistoryFilter = { query: "" };
   private readonly bookmarks: Set<string>;
   private readonly bookmarkState: vscode.Memento;
+  private readonly testResults = new Map<string, PromptTestResult>();
 
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
-  constructor(bookmarkState: vscode.Memento) {
+  constructor(
+    bookmarkState: vscode.Memento,
+    private readonly testScriptForRepository: (repoRoot: string) => string | undefined
+  ) {
     this.bookmarkState = bookmarkState;
     this.bookmarks = new Set(bookmarkState.get<string[]>("bookmarks", []));
   }
@@ -228,6 +246,39 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
     return this.filter;
   }
 
+  /** Return the repositories currently represented by the history provider.
+   *
+   * Commands use this exact inventory so script configuration follows the same mixed-workspace source of truth.
+   */
+  getRepositoryRoots(): string[] {
+    return this.repositories.map((repository) => repository.repoRoot);
+  }
+
+  /** Refresh one repository's script label and invalidate its previous results.
+   *
+   * Results from a different validator are not comparable and must not remain decorated as current.
+   */
+  setTestScript(repoRoot: string, testScript: string | undefined): void {
+    this.repositories.find((repository) => repository.repoRoot === repoRoot)?.setTestScript(testScript);
+
+    for (const key of this.testResults.keys()) {
+      if (key.startsWith(`${repoRoot}\0`)) {
+        this.testResults.delete(key);
+      }
+    }
+
+    this.changeEmitter.fire(undefined);
+  }
+
+  /** Record the latest result for an exact revision and script identity.
+   *
+   * Session-only storage gives useful tree feedback without creating a durable results database.
+   */
+  setTestResult(request: PromptTestRequest, scriptPath: string, result: PromptTestResult): void {
+    this.testResults.set(testResultKey(request.repoRoot, request.revision, request.sourcePath, scriptPath), result);
+    this.changeEmitter.fire(undefined);
+  }
+
   private async loadRepositories(): Promise<void> {
     try {
       const roots = await findWorkspaceRepoRoots();
@@ -235,7 +286,13 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
       const settings = readSettings();
       const repositories = await Promise.all(roots.map(async (repoRoot) => {
         const page = await findPromptCommits(repoRoot, settings);
-        return new RepoNode(repoRoot, page.commits, page.hasMore, page.nextOffset);
+        return new RepoNode(
+          repoRoot,
+          page.commits,
+          page.hasMore,
+          page.nextOffset,
+          this.testScriptForRepository(repoRoot)
+        );
       }));
 
       this.repositories = repositories.filter((repository) => {
@@ -262,7 +319,19 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
 
     if (element instanceof CommitNode) {
       return element.commit.files.map((file) => {
-        return new FileNode(element.repoRoot, element.commit, file, this.bookmarks.has(fileBookmarkKey(element.repoRoot, element.commit, file)));
+        const revision = revisionForFile(element.repoRoot, element.commit, file);
+        const scriptPath = this.testScriptForRepository(element.repoRoot);
+        const result = scriptPath
+          ? this.testResults.get(testResultKey(element.repoRoot, revision.revision, file.path, scriptPath))
+          : undefined;
+
+        return new FileNode(
+          element.repoRoot,
+          element.commit,
+          file,
+          this.bookmarks.has(fileBookmarkKey(element.repoRoot, element.commit, file)),
+          result?.status
+        );
       });
     }
 
@@ -326,6 +395,26 @@ function statusLabel(file: PromptFileChange): string {
   return "Modified";
 }
 
+function testStatusLabel(status: PromptTestStatus): string {
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function testStatusIcon(status: PromptTestStatus): string {
+  if (status === "passed") {
+    return "pass-filled";
+  }
+
+  if (status === "failed") {
+    return "error";
+  }
+
+  if (status === "cancelled") {
+    return "circle-slash";
+  }
+
+  return "warning";
+}
+
 function isFileInRepository(filePath: string, repositoryRoot: string): boolean {
   const relativePath = path.relative(repositoryRoot, filePath);
 
@@ -355,4 +444,8 @@ function revisionForFile(repoRoot: string, commit: PromptCommit, file: PromptFil
     path: deleted ? file.oldPath ?? file.path : file.path,
     label: `${commit.shortHash} ${commit.subject}`
   };
+}
+
+function testResultKey(repoRoot: string, revision: string, sourcePath: string, scriptPath: string): string {
+  return `${repoRoot}\0${revision}\0${sourcePath}\0${scriptPath}`;
 }

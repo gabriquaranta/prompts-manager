@@ -4,6 +4,24 @@ export interface PromptHistorySettings {
   includeGlobs: string[];
   excludeGlobs: string[];
   maxCommits: number;
+  testTimeoutSeconds: number;
+}
+
+export type PromptTestStatus = "passed" | "failed" | "error" | "cancelled";
+
+export interface PromptTestRequest {
+  repoRoot: string;
+  sourcePath: string;
+  revision: string;
+  content: string;
+}
+
+export interface PromptTestResult {
+  status: PromptTestStatus;
+  exitCode?: number;
+  durationMs: number;
+  stdout: string;
+  stderr: string;
 }
 
 export interface PromptFileChange {
