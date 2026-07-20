@@ -3,7 +3,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { gitLogFormat, paginatePromptCommits, parseGitLog } from "./gitLogParser";
 import { isPromptPath } from "./globs";
-import { PromptCommitPage, PromptHistorySettings } from "./types";
+import { parseWorkingChanges } from "./localChanges";
+import { PromptCommitPage, PromptHistorySettings, PromptWorkingChange } from "./types";
 
 interface GitRepository {
   rootUri: vscode.Uri;
@@ -65,6 +66,21 @@ export async function findPromptCommits(
     .filter((commit) => commit.files.length > 0);
 
   return { ...page, commits };
+}
+
+/** Find the current Git changes that belong to configured prompt paths.
+ *
+ * Repository discovery remains owned by VS Code while porcelain output provides exact staged and working-tree state.
+ */
+export async function findPromptWorkingChanges(
+  repoRoot: string,
+  settings: PromptHistorySettings
+): Promise<PromptWorkingChange[]> {
+  const output = await git(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+
+  return parseWorkingChanges(output).filter((change) => {
+    return isPromptPath(change.path, settings) || Boolean(change.oldPath && isPromptPath(change.oldPath, settings));
+  });
 }
 
 export async function findWorkspaceRepositories(): Promise<readonly GitRepository[]> {

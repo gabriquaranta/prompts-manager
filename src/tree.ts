@@ -22,7 +22,7 @@ export type PromptHistoryNode =
   | TestScriptNode
   | TestResultNode;
 
-interface LatestTestResult {
+export interface LatestTestResult {
   request: PromptTestRequest;
   result: PromptTestResult;
   scriptPath: string;
@@ -326,9 +326,24 @@ export class PromptHistoryTreeProvider implements vscode.TreeDataProvider<Prompt
    * Session-only storage gives useful tree feedback without creating a durable results database.
    */
   setTestResult(request: PromptTestRequest, scriptPath: string, result: PromptTestResult): void {
-    this.testResults.set(testResultKey(request.repoRoot, request.revision, request.sourcePath, scriptPath), result);
+    if (request.revision) {
+      this.testResults.set(testResultKey(request.repoRoot, request.revision, request.sourcePath, scriptPath), result);
+    }
+
+    if (request.contentHash) {
+      this.testResults.set(testResultKey(request.repoRoot, request.contentHash, request.sourcePath, scriptPath), result);
+    }
+
     this.latestTestResults.set(request.repoRoot, { request, scriptPath, result });
     this.changeEmitter.fire(undefined);
+  }
+
+  /** Return the latest repository result shared by Prompt Management views.
+   *
+   * Exposing immutable run metadata lets Working Changes render current status without creating a second result store.
+   */
+  getLatestTestResult(repoRoot: string): LatestTestResult | undefined {
+    return this.latestTestResults.get(repoRoot);
   }
 
   private async loadRepositories(): Promise<void> {

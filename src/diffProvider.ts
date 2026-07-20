@@ -26,8 +26,25 @@ export class PromptDiffProvider implements vscode.TextDocumentContentProvider {
     }
 
     if (data.workingTree) {
-      const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(path.join(data.repoRoot, data.path)));
-      return Buffer.from(bytes).toString("utf8");
+      const fileUri = vscode.Uri.file(path.join(data.repoRoot, data.path));
+      const document = vscode.workspace.textDocuments.find((candidate) => {
+        return candidate.uri.scheme === "file" && candidate.uri.fsPath === fileUri.fsPath;
+      });
+
+      if (document) {
+        return document.getText();
+      }
+
+      try {
+        const bytes = await vscode.workspace.fs.readFile(fileUri);
+        return Buffer.from(bytes).toString("utf8");
+      } catch (error) {
+        if (error instanceof vscode.FileSystemError && error.code === "FileNotFound") {
+          return "";
+        }
+
+        throw error;
+      }
     }
 
     return readFileAtRevision(data.repoRoot, data.revision, data.path);

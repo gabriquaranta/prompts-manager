@@ -7,8 +7,11 @@ import {
   diffScheme,
   PromptDiffProvider
 } from "./diffProvider";
+import { buildWorkingDiffData } from "./diffModel";
 import { findWorkspaceRepoRoots, readFileAtRevision, watchWorkspaceRepositories } from "./git";
 import { isPromptPath } from "./globs";
+import { hashPromptContent } from "./localChanges";
+import { WorkingChangeNode, WorkingChangesTreeProvider } from "./localChangesTree";
 import { PromptLoader } from "./promptLoader";
 import { runPromptTest } from "./promptTestRunner";
 import { toRepositoryRelativePath } from "./repositoryPaths";
@@ -34,6 +37,10 @@ export function activate(context: vscode.ExtensionContext): void {
     context.workspaceState,
     (repoRoot) => testScriptStore.get(repoRoot)
   );
+  const workingProvider = new WorkingChangesTreeProvider(
+    (repoRoot) => testScriptStore.get(repoRoot),
+    (repoRoot) => treeProvider.getLatestTestResult(repoRoot)
+  );
   const diffProvider = new PromptDiffProvider();
   const promptLoader = new PromptLoader(diffProvider);
   const output = vscode.window.createOutputChannel("Prompt History Tests");
@@ -42,7 +49,12 @@ export function activate(context: vscode.ExtensionContext): void {
     treeDataProvider: treeProvider,
     showCollapseAll: true
   });
+  const workingTreeView = vscode.window.createTreeView("promptHistory.workingChanges", {
+    treeDataProvider: workingProvider,
+    showCollapseAll: true
+  });
   let gitWatchers: vscode.Disposable[] = [];
+  let workingRefreshTimer: NodeJS.Timeout | undefined;
 
   /** Resolve a context-menu argument or the current History selection to a prompt revision node.
    *
@@ -80,6 +92,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (selection === "Select Test Script") {
         const selected = await testScriptStore.select(request.repoRoot);
         treeProvider.setTestScript(request.repoRoot, selected);
+        workingProvider.refreshTestState();
       }
 
       return undefined;
@@ -118,6 +131,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     treeProvider.setTestResult(request, scriptPath, result);
+    workingProvider.refreshTestState();
     writeTestOutput(output, request, scriptPath, result);
     return result;
   };
@@ -132,10 +146,27 @@ export function activate(context: vscode.ExtensionContext): void {
     return promptLoader.load(revision, node.file.path, content);
   };
 
+  /** Debounce editor and filesystem events into one local-state refresh.
+   *
+   * Prompt typing can emit many document events, while one settled Git read is sufficient for the tree.
+   */
+  const scheduleWorkingRefresh = (): void => {
+    if (workingRefreshTimer) {
+      clearTimeout(workingRefreshTimer);
+    }
+
+    workingRefreshTimer = setTimeout(() => {
+      workingRefreshTimer = undefined;
+      void runAndReport(() => workingProvider.refresh());
+    }, 150);
+  };
+
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(diffScheme, diffProvider),
     treeView,
+    workingTreeView,
     output,
+    { dispose: () => workingRefreshTimer && clearTimeout(workingRefreshTimer) },
     vscode.commands.registerCommand("promptHistory.refresh", async () => {
       await runAndReport(() => treeProvider.refresh());
     }),
@@ -218,7 +249,8 @@ export function activate(context: vscode.ExtensionContext): void {
           repoRoot: selected.repoRoot,
           sourcePath: selected.file.path,
           revision: revision.revision,
-          content: document.getText()
+          content: document.getText(),
+          contentHash: hashPromptContent(document.getText())
         });
       });
     }),
@@ -226,6 +258,44 @@ export function activate(context: vscode.ExtensionContext): void {
       await runAndReport(async () => {
         const request = await currentPromptRequest();
         await executeTest(request);
+      });
+    }),
+    vscode.commands.registerCommand("promptHistory.refreshWorkingChanges", async () => {
+      await runAndReport(() => workingProvider.refresh());
+    }),
+    vscode.commands.registerCommand("promptHistory.openWorkingDiff", async (node: WorkingChangeNode) => {
+      await runAndReport(async () => {
+        const { left, right, title } = buildWorkingDiffUris(diffProvider, node);
+        await vscode.commands.executeCommand("vscode.diff", left, right, title);
+      });
+    }),
+    vscode.commands.registerCommand("promptHistory.openWorkingFile", async (node: WorkingChangeNode) => {
+      await runAndReport(async () => {
+        if (node.change.kind === "deleted" && !node.change.unsaved) {
+          throw new Error(`${node.change.path} is deleted`);
+        }
+
+        const document = await vscode.workspace.openTextDocument(
+          vscode.Uri.file(path.join(node.repoRoot, node.change.path))
+        );
+        await vscode.window.showTextDocument(document);
+      });
+    }),
+    vscode.commands.registerCommand("promptHistory.testWorkingPrompt", async (node: WorkingChangeNode) => {
+      await runAndReport(async () => {
+        await executeTest(await workingProvider.getTestRequest(node));
+      });
+    }),
+    vscode.commands.registerCommand("promptHistory.copyCurrentPrompt", async (node: WorkingChangeNode) => {
+      await runAndReport(async () => {
+        await vscode.env.clipboard.writeText(await workingProvider.getContent(node));
+      });
+    }),
+    vscode.commands.registerCommand("promptHistory.showCommittedHistory", async (node: WorkingChangeNode) => {
+      await runAndReport(async () => {
+        await treeProvider.showFileHistory(vscode.Uri.file(path.join(node.repoRoot, node.change.path)));
+        await vscode.commands.executeCommand("workbench.view.extension.promptManagement");
+        await vscode.commands.executeCommand("promptHistory.commits.focus");
       });
     }),
     vscode.commands.registerCommand("promptHistory.selectTestScript", async (node?: RepoNode | FileNode | TestScriptNode) => {
@@ -240,6 +310,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         if (selected) {
           treeProvider.setTestScript(repoRoot, selected);
+          workingProvider.refreshTestState();
         }
       });
     }),
@@ -253,6 +324,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         await testScriptStore.clear(repoRoot);
         treeProvider.setTestScript(repoRoot, undefined);
+        workingProvider.refreshTestState();
       });
     }),
     vscode.commands.registerCommand("promptHistory.showTestOutput", () => {
@@ -269,15 +341,42 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (event.affectsConfiguration("promptHistory")) {
-        await runAndReport(() => treeProvider.refresh());
+        await runAndReport(async () => {
+          await Promise.all([treeProvider.refresh(), workingProvider.refresh()]);
+        });
       }
     }),
     vscode.workspace.onDidChangeWorkspaceFolders(async () => {
       gitWatchers.forEach((watcher) => watcher.dispose());
       gitWatchers = [];
-      await runAndReport(() => treeProvider.refresh());
+      await runAndReport(async () => {
+        await Promise.all([treeProvider.refresh(), workingProvider.refresh()]);
+      });
       await installGitWatchers();
-    })
+    }),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.document.uri.scheme === "file") {
+        scheduleWorkingRefresh();
+      }
+    }),
+    vscode.workspace.onDidOpenTextDocument((document) => {
+      if (document.uri.scheme === "file") {
+        scheduleWorkingRefresh();
+      }
+    }),
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      if (document.uri.scheme === "file") {
+        scheduleWorkingRefresh();
+      }
+    }),
+    vscode.workspace.onDidSaveTextDocument((document) => {
+      if (document.uri.scheme === "file") {
+        scheduleWorkingRefresh();
+      }
+    }),
+    vscode.workspace.onDidCreateFiles(scheduleWorkingRefresh),
+    vscode.workspace.onDidDeleteFiles(scheduleWorkingRefresh),
+    vscode.workspace.onDidRenameFiles(scheduleWorkingRefresh)
   );
 
   /** Install Git state listeners for the repositories known to VS Code Source Control.
@@ -287,11 +386,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const installGitWatchers = async (): Promise<void> => {
     gitWatchers = await watchWorkspaceRepositories(() => {
       void runAndReport(() => treeProvider.refresh());
+      scheduleWorkingRefresh();
     });
     context.subscriptions.push(...gitWatchers);
   };
 
   void runAndReport(() => treeProvider.refresh());
+  void runAndReport(() => workingProvider.refresh());
   void installGitWatchers();
 }
 
@@ -327,7 +428,24 @@ async function currentPromptRequest(): Promise<PromptTestRequest> {
     throw new Error(`${sourcePath} is not included by the Prompt History file settings`);
   }
 
-  return { repoRoot, sourcePath, revision: "", content: document.getText() };
+  const content = document.getText();
+  return { repoRoot, sourcePath, revision: "", content, contentHash: hashPromptContent(content) };
+}
+
+/** Build a HEAD-to-working-content diff for one normalized local prompt change.
+ *
+ * Added and deleted boundaries use empty virtual documents while dirty buffers flow through the working-tree provider.
+ */
+function buildWorkingDiffUris(
+  provider: PromptDiffProvider,
+  node: WorkingChangeNode
+): { left: vscode.Uri; right: vscode.Uri; title: string } {
+  const data = buildWorkingDiffData(node.repoRoot, node.change);
+  return {
+    left: provider.registerDocument(data.left),
+    right: provider.registerDocument(data.right),
+    title: data.title
+  };
 }
 
 /** Resolve a command target to one repository, prompting only when the target is ambiguous.

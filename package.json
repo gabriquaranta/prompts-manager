@@ -1,7 +1,7 @@
 {
   "name": "prompt-history",
   "displayName": "Prompt History",
-  "description": "Browse, restore, and test committed prompt-file revisions.",
+  "description": "Browse, restore, and test committed revisions and working prompt changes.",
   "version": "0.0.1",
   "publisher": "local",
   "engines": {
@@ -27,6 +27,13 @@
     "onCommand:promptHistory.selectTestScript",
     "onCommand:promptHistory.clearTestScript",
     "onCommand:promptHistory.showTestOutput",
+    "onView:promptHistory.workingChanges",
+    "onCommand:promptHistory.refreshWorkingChanges",
+    "onCommand:promptHistory.openWorkingDiff",
+    "onCommand:promptHistory.openWorkingFile",
+    "onCommand:promptHistory.testWorkingPrompt",
+    "onCommand:promptHistory.copyCurrentPrompt",
+    "onCommand:promptHistory.showCommittedHistory",
     "onCommand:promptHistory.loadMore",
     "onCommand:promptHistory.toggleBookmark",
     "onCommand:promptHistory.openSettings"
@@ -121,6 +128,39 @@
         "category": "Prompt History"
       },
       {
+        "command": "promptHistory.refreshWorkingChanges",
+        "title": "Refresh Working Changes",
+        "category": "Prompt History",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "promptHistory.openWorkingDiff",
+        "title": "Open Working Diff",
+        "category": "Prompt History",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "promptHistory.openWorkingFile",
+        "title": "Open File",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.testWorkingPrompt",
+        "title": "Test Current Prompt",
+        "category": "Prompt History",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "promptHistory.copyCurrentPrompt",
+        "title": "Copy Current Prompt",
+        "category": "Prompt History"
+      },
+      {
+        "command": "promptHistory.showCommittedHistory",
+        "title": "Show Committed History",
+        "category": "Prompt History"
+      },
+      {
         "command": "promptHistory.loadMore",
         "title": "Load More History",
         "category": "Prompt History"
@@ -180,6 +220,28 @@
       }
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "promptHistory.openWorkingDiff",
+          "when": "false"
+        },
+        {
+          "command": "promptHistory.openWorkingFile",
+          "when": "false"
+        },
+        {
+          "command": "promptHistory.testWorkingPrompt",
+          "when": "false"
+        },
+        {
+          "command": "promptHistory.copyCurrentPrompt",
+          "when": "false"
+        },
+        {
+          "command": "promptHistory.showCommittedHistory",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "promptHistory.refresh",
@@ -199,6 +261,11 @@
         {
           "command": "promptHistory.openSettings",
           "when": "view == promptHistory.commits",
+          "group": "navigation"
+        },
+        {
+          "command": "promptHistory.refreshWorkingChanges",
+          "when": "view == promptHistory.workingChanges",
           "group": "navigation"
         }
       ],
@@ -259,6 +326,31 @@
           "group": "promptManagement@1"
         },
         {
+          "command": "promptHistory.openWorkingDiff",
+          "when": "viewItem == promptHistoryWorkingFile || viewItem == promptHistoryWorkingFileDeleted",
+          "group": "inline"
+        },
+        {
+          "command": "promptHistory.testWorkingPrompt",
+          "when": "viewItem == promptHistoryWorkingFile",
+          "group": "inline"
+        },
+        {
+          "command": "promptHistory.openWorkingFile",
+          "when": "viewItem == promptHistoryWorkingFile",
+          "group": "promptManagement@1"
+        },
+        {
+          "command": "promptHistory.copyCurrentPrompt",
+          "when": "viewItem == promptHistoryWorkingFile",
+          "group": "promptManagement@2"
+        },
+        {
+          "command": "promptHistory.showCommittedHistory",
+          "when": "viewItem == promptHistoryWorkingFile || viewItem == promptHistoryWorkingFileDeleted",
+          "group": "promptManagement@3"
+        },
+        {
           "command": "promptHistory.toggleBookmark",
           "when": "viewItem == promptHistoryCommit || viewItem == promptHistoryFile",
           "group": "navigation"
@@ -296,6 +388,11 @@
         {
           "id": "promptHistory.commits",
           "name": "History",
+          "icon": "resources/prompt-history.svg"
+        },
+        {
+          "id": "promptHistory.workingChanges",
+          "name": "Working Changes",
           "icon": "resources/prompt-history.svg"
         }
       ]

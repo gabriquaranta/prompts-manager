@@ -1,4 +1,4 @@
-import { PromptCommit, PromptFileChange, PromptRevision } from "./types";
+import { PromptCommit, PromptFileChange, PromptRevision, PromptWorkingChange } from "./types";
 
 export interface DiffDocumentData {
   repoRoot: string;
@@ -37,6 +37,32 @@ export function buildRevisionDiffData(left: PromptRevision, right: PromptRevisio
     left: toDocumentData(left),
     right: toDocumentData(right),
     title: `${left.label} ↔ ${right.label}`
+  };
+}
+
+/** Build the HEAD-to-working-content diff boundary for one local prompt change.
+ *
+ * Explicit empty sides correctly represent added, untracked, and deleted prompts without fake Git revisions.
+ */
+export function buildWorkingDiffData(
+  repoRoot: string,
+  change: PromptWorkingChange
+): DiffData {
+  return {
+    left: {
+      repoRoot,
+      revision: "HEAD",
+      path: change.oldPath ?? change.path,
+      empty: change.kind === "added" || change.kind === "untracked"
+    },
+    right: {
+      repoRoot,
+      revision: "",
+      path: change.path,
+      empty: change.kind === "deleted" && !change.unsaved,
+      workingTree: true
+    },
+    title: `${change.path}: HEAD ↔ Working Changes`
   };
 }
 

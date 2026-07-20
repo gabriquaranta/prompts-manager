@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDiffData, buildRevisionDiffData } from "../src/diffModel";
+import { buildDiffData, buildRevisionDiffData, buildWorkingDiffData } from "../src/diffModel";
 import { PromptCommit } from "../src/types";
 
 const commit: PromptCommit = {
@@ -92,6 +92,56 @@ describe("buildDiffData", () => {
       }
     );
 
+    expect(diff.right.workingTree).toBe(true);
+  });
+
+  it("uses HEAD and current content for a modified working prompt", () => {
+    const diff = buildWorkingDiffData("/repo", {
+      path: "prompts/a.prompt.md",
+      kind: "modified",
+      staged: false,
+      workingTree: true,
+      untracked: false,
+      unsaved: true
+    });
+
+    expect(diff.left).toMatchObject({ revision: "HEAD", empty: false });
+    expect(diff.right).toMatchObject({ workingTree: true, empty: false });
+  });
+
+  it("uses empty boundaries for untracked and deleted working prompts", () => {
+    const untracked = buildWorkingDiffData("/repo", {
+      path: "prompts/new.prompt.md",
+      kind: "untracked",
+      staged: false,
+      workingTree: true,
+      untracked: true,
+      unsaved: false
+    });
+    const deleted = buildWorkingDiffData("/repo", {
+      path: "prompts/deleted.prompt.md",
+      kind: "deleted",
+      staged: false,
+      workingTree: true,
+      untracked: false,
+      unsaved: false
+    });
+
+    expect(untracked.left.empty).toBe(true);
+    expect(deleted.right.empty).toBe(true);
+  });
+
+  it("uses an unsaved editor buffer when a working file was deleted", () => {
+    const diff = buildWorkingDiffData("/repo", {
+      path: "prompts/deleted.prompt.md",
+      kind: "deleted",
+      staged: false,
+      workingTree: true,
+      untracked: false,
+      unsaved: true
+    });
+
+    expect(diff.right.empty).toBe(false);
     expect(diff.right.workingTree).toBe(true);
   });
 });

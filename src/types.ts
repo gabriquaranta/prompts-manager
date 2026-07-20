@@ -14,6 +14,20 @@ export interface PromptTestRequest {
   sourcePath: string;
   revision: string;
   content: string;
+  contentHash?: string;
+}
+
+export type WorkingChangeKind = "modified" | "added" | "deleted" | "renamed" | "untracked";
+
+export interface PromptWorkingChange {
+  path: string;
+  oldPath?: string;
+  kind: WorkingChangeKind;
+  staged: boolean;
+  workingTree: boolean;
+  untracked: boolean;
+  unsaved: boolean;
+  contentHash?: string;
 }
 
 export interface PromptTestResult {

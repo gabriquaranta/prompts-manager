@@ -99,6 +99,17 @@ The extension supports VS Code multi-root workspaces and parent folders containi
 - Previews and confirms the revision before changing a file.
 - Refuses to overwrite a document with unsaved changes.
 
+### Working Changes
+
+- Shows staged, unstaged, combined, untracked, deleted, and renamed prompt changes in a separate view.
+- Includes dirty editor buffers before they are saved to disk.
+- Keeps one current node per prompt path instead of duplicating staged and unstaged entries.
+- Opens `HEAD`-to-working-content diffs, including unsaved editor text.
+- Tests or copies the exact current prompt content.
+- Links a local prompt directly to its committed History filter.
+- Refreshes from Git, workspace file operations, and editor changes.
+- Does not stage, discard, reset, delete, or commit files.
+
 ### Prompt testing
 
 - Selects one repository-owned Python test script per discovered repository.
@@ -138,11 +149,25 @@ The extension changes a prompt file only after an explicit `Load Revision` confi
 
 1. Open a folder or workspace containing one or more Git repositories in VS Code.
 2. Open `Prompt Management` from the Activity Bar.
-3. Open the `History` view.
+3. Use `History` for committed revisions or `Working Changes` for current uncommitted prompts.
 4. Expand a repository, commit, and prompt file to browse its history.
 5. Select a prompt file to open its standard VS Code diff.
 
 The Prompt History view is populated from committed files. If no prompt files are displayed, check the include and exclude glob settings.
+
+### Work with local prompt changes
+
+Open `Working Changes` inside Prompt Management. Each changed prompt shows its Git and editor state, such as `Modified`, `Staged`, `Untracked`, `Deleted`, `Renamed`, or `Unsaved`.
+
+Select a file to open its diff against `HEAD`. Right-click it for:
+
+- `Open Working Diff`: compare committed and current content.
+- `Open File`: open the current working document.
+- `Test Current Prompt`: test current content, including unsaved edits.
+- `Copy Current Prompt`: copy current content.
+- `Show Committed History`: filter History to that prompt path.
+
+Added and untracked files compare an empty left side with current content. Deleted files compare `HEAD` with an empty right side. Renames compare the old committed path with the new working path.
 
 ### View toolbar actions
 
@@ -168,7 +193,7 @@ Right-click a prompt file inside the Prompt History view to access:
 
 ### Configure a test script
 
-Select the `Test script` row at the top of History, then choose one `.py` file inside the owning repository. The selection is stored locally in VS Code workspace state and is independent for each repository. In a multi-repository workspace, the row appears at the top of each repository group.
+Select the `Test script` row at the top of History or Working Changes, then choose one `.py` file inside the owning repository. Both views share the same selection and latest result. The selection is stored locally in VS Code workspace state and is independent for each repository. In a multi-repository workspace, the row appears at the top of each repository group.
 
 The repository must contain its Python virtual environment at the exact platform path:
 
